@@ -30,7 +30,7 @@ Funciona de dois jeitos, com o mesmo código:
 ## Instalação no Foundry
 
 1. Em *Add-on Modules → Install Module*, cole a URL do manifesto:
-   `https://github.com/OWNER/REPO/releases/latest/download/module.json`
+   `https://github.com/fernandowrpg/dh-enemy-builder/releases/latest/download/module.json`
 2. Ative o módulo no mundo (sistema Daggerheart).
 3. Abra a aba **Atores** e clique em **Forja de Antagonistas**.
 
