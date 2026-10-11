@@ -1,6 +1,6 @@
 # Forja de Antagonistas — Daggerheart
 
-Ferramenta para **criar adversários** de Daggerheart, **reaproveitar ou inventar habilidades** e **mudar o patamar**
+Ferramenta para **criar adversários e ambientes** de Daggerheart, **reaproveitar ou inventar habilidades** e **mudar o patamar**
 de qualquer ficha com um clique. O resultado sai no formato do sistema
 [Foundryborne Daggerheart](https://github.com/Foundryborne/daggerheart) **1.9.14** para **Foundry VTT 13** (verificado na 13.351).
 
@@ -25,7 +25,10 @@ Funciona de dois jeitos, com o mesmo código:
   e quantos Pontos de Batalha o adversário custa.
 - **Foundry**: cada habilidade vira um item *feature* com ação, custo (Fadiga/Medo), dano, alcance e teste de reação
   deduzidos do texto — e ajustáveis à mão em “No Foundry”.
-- **Editar fichas que já estão no Foundry**: botão direito num adversário → *Abrir na Forja de Antagonistas*.
+- **Ambientes**: crie, edite e mude o patamar de ambientes (Exploração, Social, Travessia, Evento), com impulsos,
+  adversários sugeridos, habilidades com perguntas de inspiração e incidente incitante. Saem como ator *Ambiente*;
+  as perguntas vão em bloco secreto (só o mestre vê) e o incidente vai para as Notas.
+- **Editar fichas que já estão no Foundry**: botão direito num adversário ou ambiente → *Abrir na Forja de Antagonistas*.
 
 ## Instalação no Foundry
 
@@ -49,7 +52,7 @@ A página também pode ser publicada pelo GitHub Pages (Settings → Pages → b
 
 ## Biblioteca dos livros
 
-A biblioteca (fichas e habilidades do *Livro Básico* e do *Bestiário do Medo*) é extraída dos **seus** PDFs e fica só
+A biblioteca (adversários, ambientes e habilidades do *Livro Básico* e do *Bestiário do Medo*) é extraída dos **seus** PDFs e fica só
 na sua máquina, em `data/library.json` — arquivo ignorado pelo Git, pois contém texto protegido por direitos autorais.
 
 ```bash
@@ -78,6 +81,11 @@ A Forja guarda, para cada tipo e patamar, os valores típicos de Dificuldade, li
 | Horda (X) | recalculada como cerca de metade do novo dano |
 | Experiências | +2 nos patamares 1–2, +3 nos patamares 3–4 |
 | Texto das habilidades | só fórmulas ligadas a “dano” e Dificuldades explícitas de testes são alteradas |
+
+**Ambientes** seguem a tabela do livro (*Adaptando Ambientes*): a Dificuldade muda 3 pontos por patamar
+(11 / 14 / 17 / 20, mantendo o desvio que a ficha já tinha), as Dificuldades citadas nas habilidades acompanham e o
+dano das habilidades é levado para a faixa do novo patamar. A Forja lembra de trocar os adversários sugeridos ou
+invocados e de acrescentar uma habilidade de Medo ao subir.
 
 Depois vêm os lembretes do livro (*Improvisando Adversários*): somar 1–3 PV/PF ao subir para o 3º/4º patamar e
 acrescentar ou remover uma habilidade em vez de só mexer em números. Condições, alcances e efeitos sem números

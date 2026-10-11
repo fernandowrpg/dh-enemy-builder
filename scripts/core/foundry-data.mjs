@@ -2,7 +2,7 @@
  * Conversão entre o modelo da Forja e os dados de Actor "adversary" do sistema
  * Foundryborne Daggerheart 1.9.14 (Foundry VTT 13).
  */
-import { MODULE_ID, RANGES, TRAITS } from './rules.mjs';
+import { ENV_BENCH, MODULE_ID, RANGES, TRAITS, isEnvironment } from './rules.mjs';
 import { formatFormula, parseFormula } from './dice.mjs';
 import { hordeDamage } from './scale.mjs';
 
@@ -154,6 +154,9 @@ const FEATURE_ICON = {
     reaction: 'icons/skills/movement/arrow-upward-yellow.webp'
 };
 
+/** Perguntas de inspiração do ambiente: só o mestre vê (bloco "secret"), como nos compêndios do sistema. */
+const questionsHtml = q => (q ? `<section class="secret"><p><em>${esc(q)}</em></p></section>` : '');
+
 function featureItem(feature, adv, sort) {
     const fx = deriveFx(feature, adv);
     const img = FEATURE_ICON[feature.form] ?? FEATURE_ICON.passive;
@@ -164,7 +167,7 @@ function featureItem(feature, adv, sort) {
         type: 'feature',
         img,
         system: {
-            description: html(feature.text),
+            description: html(feature.text) + questionsHtml(feature.questions),
             resource: null,
             actions: action ? { [action._id]: action } : {},
             originItemType: null,
@@ -178,7 +181,36 @@ function featureItem(feature, adv, sort) {
 }
 
 /** Monta os dados completos de um Actor do tipo "adversary", prontos para Actor.create() ou "Importar Dados". */
-export function toFoundryActor(adv) {
+export function toFoundryActor(entity) {
+    return isEnvironment(entity) ? toFoundryEnvironment(entity) : toFoundryAdversary(entity);
+}
+
+/** Dados de um Actor do tipo "environment". */
+export function toFoundryEnvironment(env) {
+    const ctx = { attack: { damageType: 'physical' } };
+    const notes = [];
+    if (env.difficulty === null && env.difficultyNote) notes.push(`<p><strong>Dificuldade:</strong> ${esc(env.difficultyNote)}</p>`);
+    if (env.incident?.text) notes.push(`<h3>${esc(env.incident.name || 'Incidente incitante')}</h3>${html(env.incident.text)}`);
+    return {
+        name: env.name,
+        type: 'environment',
+        img: env.img || 'systems/daggerheart/assets/icons/documents/actors/forest.svg',
+        system: {
+            tier: env.tier,
+            type: env.type,
+            description: html(env.description),
+            impulses: env.impulses ?? '',
+            difficulty: Number.isInteger(env.difficulty) ? env.difficulty : ENV_BENCH[env.tier].difficulty,
+            potentialAdversaries: env.adversaries ? { [randomID()]: { label: env.adversaries, adversaries: [] } } : {},
+            notes: notes.join('')
+        },
+        items: env.features.map((f, i) => featureItem(f, ctx, (i + 1) * 100000)),
+        effects: [],
+        flags: { [MODULE_ID]: { model: env, version: 1 } }
+    };
+}
+
+function toFoundryAdversary(adv) {
     const isMinion = adv.type === 'minion';
     const alt = adv.type === 'horde' ? hordeDamage(adv) : null;
     const experiences = {};
@@ -246,6 +278,58 @@ function partFormula(value) {
 
 /** Lê um Actor "adversary" (objeto vindo de actor.toObject()) para o modelo da Forja. */
 export function fromFoundryActor(actor) {
+    return actor.type === 'environment' ? fromFoundryEnvironment(actor) : fromFoundryAdversary(actor);
+}
+
+function fromFoundryEnvironment(actor) {
+    const saved = actor.flags?.[MODULE_ID]?.model;
+    const sys = actor.system ?? {};
+    const features = (actor.items ?? [])
+        .filter(i => i.type === 'feature')
+        .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+        .map(i => {
+            const raw = String(i.system?.description ?? '');
+            // a última seção "secret" em itálico guarda as perguntas; o resto é texto da habilidade
+            const secrets = [...raw.matchAll(/<section[^>]*class="secret"[^>]*>([\s\S]*?)<\/section>/gi)];
+            const last = secrets[secrets.length - 1];
+            const isQuestions = last && /<em>/i.test(last[1]) && /\?\s*(<\/em>)?\s*(<\/p>)?\s*$/i.test(last[1]);
+            const body = isQuestions ? raw.replace(last[0], '') : raw;
+            return {
+                key: randomID().slice(0, 8),
+                name: i.name,
+                form: i.system?.featureForm ?? 'passive',
+                text: plain(body)
+                    .replace(/@Lookup\[@name\]/g, actor.name)
+                    .replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, '$1')
+                    .replace(/\s*\n+\s*/g, ' '),
+                questions: isQuestions ? plain(last[1]) : ''
+            };
+        });
+    const env = {
+        kind: 'environment',
+        id: `foundry:${actor._id ?? randomID()}`,
+        name: actor.name,
+        source: 'Foundry',
+        img: actor.img,
+        tier: Number(sys.tier) || 1,
+        type: sys.type || 'exploration',
+        description: plain(sys.description),
+        impulses: sys.impulses ?? '',
+        difficulty: Number(sys.difficulty) || 0,
+        difficultyNote: '',
+        adversaries: Object.values(sys.potentialAdversaries ?? {}).map(g => g.label).filter(Boolean).join('; '),
+        features
+    };
+    if (saved?.kind === 'environment' && saved.name === env.name) {
+        env.adversaries ||= saved.adversaries ?? '';
+        if (saved.incident) env.incident = saved.incident;
+        if (saved.difficultyNote && saved.difficulty === null) Object.assign(env, { difficulty: null, difficultyNote: saved.difficultyNote });
+        if (saved.features?.length === features.length) features.forEach((f, i) => saved.features[i].fx && (f.fx = saved.features[i].fx));
+    }
+    return env;
+}
+
+function fromFoundryAdversary(actor) {
     const saved = actor.flags?.[MODULE_ID]?.model;
     const sys = actor.system ?? {};
     const part = sys.attack?.damage?.parts?.find(p => p.applyTo === 'hitPoints') ?? sys.attack?.damage?.parts?.[0];

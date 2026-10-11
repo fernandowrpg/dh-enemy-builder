@@ -38,13 +38,16 @@ const RANGE_MAP = [
     [/^(corpo a corpo|cac)/i, 'melee']
 ];
 
+const ENV_TYPE_MAP = { Exploração: 'exploration', Social: 'social', Travessia: 'traversal', Evento: 'event' };
+
 const FORM_MAP = { passiva: 'passive', ação: 'action', reação: 'reaction', montaria: 'passive', familiar: 'passive' };
 
 const ANCHOR = new RegExp(
     `^(${Object.keys(TYPE_MAP).join('|')}) \\((\\d)\\s?[°ºªo]? ?patamar\\)(?: ?\\((\\d*)\\s?/\\s?PV\\))?\\s*(.*)$`
 );
+const ENV_ANCHOR = new RegExp(`^(${Object.keys(ENV_TYPE_MAP).join('|')}) \\((\\d)\\s?[°ºªo]? ?patamar\\)\\s*(.*)$`);
 const FEATURE_START =
-    /(^|[.!?”"…] )([A-ZÀ-ÖØ-Ý0-9][^:\n.!?]{0,70}?) \((passiva|ação|reação|montaria|familiar)\):\s*/g;
+    /(^|[.!?”"…] )([A-ZÀ-ÖØ-Ý0-9](?:[^:\n.!?]|[!?](?= \()){0,70}?) \((passiva|ação|reação|montaria|familiar)\):\s*/g;
 
 function findPdftotext() {
     const candidates = [
@@ -163,6 +166,66 @@ function parseFeatures(lines, warnings, who) {
     return features;
 }
 
+/** Separa as perguntas de inspiração (frases finais terminadas em "?") do texto da habilidade. */
+function splitQuestions(text) {
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    const questions = [];
+    while (sentences.length > 1 && /\?$/.test(sentences[sentences.length - 1])) questions.unshift(sentences.pop());
+    return { text: sentences.join(' '), questions: questions.join(' ') };
+}
+
+function parseEnvironment(label, lines, a, limit, warnings, who) {
+    let i = a.i + 1;
+    const intro = [a.m[3]];
+    while (i < limit && !/^Dificuldade:/.test(lines[i].text) && i - a.i < 12) intro.push(lines[i++].text);
+    if (i >= limit || !/^Dificuldade:/.test(lines[i].text)) return null;
+
+    let stats = '';
+    const statsStart = i;
+    while (i < limit && i - statsStart < 5 && !/^(HABILIDADES|CARACTERÍSTICAS)/.test(lines[i].text)) stats += ` ${lines[i++].text}`;
+    const sm = /Dificuldade:\s*(.*?)\s*Adversários:\s*(.*)$/.exec(stats.trim());
+    if (!sm || i >= limit) {
+        warnings.push(`${who}: ambiente com estatísticas não reconhecidas -> ${stats.trim().slice(0, 120)}`);
+        return null;
+    }
+    const first = { ...lines[i], text: lines[i].text.replace(/^(HABILIDADES|CARACTERÍSTICAS)\s*/, '') };
+    const features = parseFeatures([first, ...lines.slice(i + 1, limit)], warnings, who).map(f => {
+        const { tag, ...rest } = f;
+        return { ...rest, ...splitQuestions(f.text) };
+    });
+
+    // incidente incitante (Bestiário): título em maiúsculas + parágrafos até a primeira linha em branco
+    let incident;
+    const at = lines.slice(i, limit).findIndex(l => /^Incidente incitante/i.test(l.text));
+    if (at > 0) {
+        let j = i + at + 1;
+        const paragraphs = [];
+        while (j < limit && lines[j].text !== '' && !isJunk(lines[j].text)) paragraphs.push(lines[j++].text);
+        incident = { name: titleCase(lines[i + at - 1].text), text: paragraphs.join('\n') };
+    }
+
+    const introText = intro.join(' ').replace(/\s+/g, ' ').trim();
+    const [description, impulses = ''] = introText.split(/Impulsos:\s*/);
+    const name = titleCase(a.name);
+    const difficulty = /^\d+$/.test(sm[1]) ? Number(sm[1]) : null;
+    return {
+        kind: 'environment',
+        id: `${slug(label)}:ambiente:${slug(name)}`,
+        name,
+        source: label,
+        page: lines[a.i].page,
+        tier: Number(a.m[2]),
+        type: ENV_TYPE_MAP[a.m[1]],
+        description: description.trim(),
+        impulses: impulses.trim(),
+        difficulty,
+        difficultyNote: difficulty === null ? sm[1] : '',
+        adversaries: sm[2].replace(/\.$/, '').trim(),
+        features,
+        incident
+    };
+}
+
 function parseSource(label, file, bin) {
     const text = execFileSync(bin, ['-enc', 'UTF-8', file, '-'], { maxBuffer: 512 * 1024 * 1024 }).toString('utf8');
     const lines = [];
@@ -172,7 +235,8 @@ function parseSource(label, file, bin) {
 
     const anchors = [];
     lines.forEach((l, i) => {
-        const m = ANCHOR.exec(l.text);
+        const env = ENV_ANCHOR.exec(l.text);
+        const m = env ?? ANCHOR.exec(l.text);
         if (!m) return;
         // nome: linhas em maiúsculas imediatamente acima
         let j = i - 1;
@@ -184,14 +248,20 @@ function parseSource(label, file, bin) {
             nameLines.unshift(lines[j--].text);
         }
         if (!nameLines.length) return;
-        anchors.push({ i, nameStart: j + 1, name: nameLines.join(' ').replace(/- -/g, '-'), m });
+        anchors.push({ i, nameStart: j + 1, name: nameLines.join(' ').replace(/- -/g, '-'), m, env: !!env });
     });
 
     const out = [];
+    const environments = [];
     const warnings = [];
     anchors.forEach((a, k) => {
         const limit = k + 1 < anchors.length ? anchors[k + 1].nameStart : Math.min(lines.length, a.i + 120);
         const who = `${label} p.${lines[a.i].page} ${a.name}`;
+        if (a.env) {
+            const env = parseEnvironment(label, lines, a, limit, warnings, who);
+            if (env) environments.push(env);
+            return;
+        }
         let i = a.i;
         const intro = [a.m[4]];
         i++;
@@ -260,12 +330,15 @@ function parseSource(label, file, bin) {
     });
 
     // fichas repetidas (exemplos arquetípicos reaparecem na lista): mantém a mais completa
-    const byId = new Map();
-    for (const adv of out) {
-        const prev = byId.get(adv.id);
-        if (!prev || adv.features.length >= prev.features.length) byId.set(adv.id, adv); // empate: fica a da lista de fichas
-    }
-    return { adversaries: [...byId.values()], warnings };
+    const dedupe = list => {
+        const byId = new Map();
+        for (const x of list) {
+            const prev = byId.get(x.id);
+            if (!prev || x.features.length >= prev.features.length) byId.set(x.id, x); // empate: fica a da lista de fichas
+        }
+        return [...byId.values()];
+    };
+    return { adversaries: dedupe(out), environments: dedupe(environments), warnings };
 }
 
 function main() {
@@ -275,17 +348,18 @@ function main() {
         process.exit(1);
     }
     const bin = findPdftotext();
-    const library = { format: 1, generatedAt: new Date().toISOString(), sources: [], adversaries: [] };
+    const library = { format: 2, generatedAt: new Date().toISOString(), sources: [], adversaries: [], environments: [] };
     for (const arg of args) {
         const eq = arg.indexOf('=');
         const label = eq > 0 ? arg.slice(0, eq) : arg.replace(/^.*[\\/]/, '').replace(/\.pdf$/i, '');
         const file = eq > 0 ? arg.slice(eq + 1) : arg;
         if (!existsSync(file)) throw new Error(`Arquivo não encontrado: ${file}`);
-        const { adversaries, warnings } = parseSource(label, file, bin);
+        const { adversaries, environments, warnings } = parseSource(label, file, bin);
         library.sources.push(label);
         library.adversaries.push(...adversaries);
-        const nFeat = adversaries.reduce((n, a) => n + a.features.length, 0);
-        console.log(`${label}: ${adversaries.length} adversários, ${nFeat} habilidades`);
+        library.environments.push(...environments);
+        const nFeat = [...adversaries, ...environments].reduce((n, a) => n + a.features.length, 0);
+        console.log(`${label}: ${adversaries.length} adversários, ${environments.length} ambientes, ${nFeat} habilidades`);
         for (const w of warnings) console.warn(`  aviso: ${w}`);
     }
     const outFile = resolve(ROOT, 'data', 'library.json');

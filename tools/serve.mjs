@@ -6,7 +6,7 @@ import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = Number(process.env.PORT) || 5173;
+const PORT = Number(process.argv[2] || process.env.PORT) || 5173;
 const TYPES = {
     '.html': 'text/html',
     '.mjs': 'text/javascript',

@@ -1,8 +1,8 @@
 {
   "id": "dh-antagonist-forge",
   "title": "Forja de Antagonistas (Daggerheart)",
-  "description": "Crie adversários de Daggerheart, reaproveite e invente habilidades e mude o patamar de qualquer ficha com um clique.",
-  "version": "0.1.0",
+  "description": "Crie adversários e ambientes de Daggerheart, reaproveite e invente habilidades e mude o patamar de qualquer ficha com um clique.",
+  "version": "0.2.0",
   "authors": [
     {
       "name": "fernandowrpg"

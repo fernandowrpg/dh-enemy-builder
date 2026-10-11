@@ -3,8 +3,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { average, fitFormula, parseFormula, scaleFormula } from '../scripts/core/dice.mjs';
-import { BENCH, TYPES } from '../scripts/core/rules.mjs';
-import { blankAdversary, scaleAdversary, scaleFeatureText } from '../scripts/core/scale.mjs';
+import { BENCH, ENV_TYPES, TYPES } from '../scripts/core/rules.mjs';
+import { blankAdversary, blankEnvironment, scaleAdversary, scaleEntity, scaleFeatureText } from '../scripts/core/scale.mjs';
 import { deriveFx, fromFoundryActor, toFoundryActor } from '../scripts/core/foundry-data.mjs';
 
 let count = 0;
@@ -150,10 +150,63 @@ test('exportação para o Foundry e leitura de volta', () => {
     }
 });
 
+function checkEnvironment(actor, env) {
+    assert.equal(actor.type, 'environment');
+    const s = actor.system;
+    assert.ok(Number.isInteger(s.tier) && s.tier >= 1 && s.tier <= 4);
+    assert.ok(s.type in ENV_TYPES, `${env.name}: tipo ${s.type}`);
+    assert.ok(Number.isInteger(s.difficulty), `${env.name}: Dificuldade`);
+    for (const group of Object.values(s.potentialAdversaries)) assert.ok(typeof group.label === 'string' && Array.isArray(group.adversaries));
+    assert.equal(actor.items.length, env.features.length);
+    for (const item of actor.items) {
+        assert.ok(['passive', 'action', 'reaction'].includes(item.system.featureForm));
+        for (const action of Object.values(item.system.actions)) assert.ok(['attack', 'damage', 'effect'].includes(action.type));
+    }
+}
+
+test('ambientes: escala pela tabela do livro, exporta e lê de volta', () => {
+    const env = blankEnvironment('traversal', 1);
+    Object.assign(env, { name: 'Rio de Teste', impulses: 'arrastar', adversaries: 'feras', difficulty: 10 });
+    env.features.push({
+        name: 'Corrente',
+        form: 'action',
+        text: 'Gaste 1 Ponto de Medo. O alvo deve fazer um teste de reação de Agilidade (12). Se falhar, sofre 1d6+1 pontos de dano físico. A Dificuldade do ambiente aumenta para 12. Contagem de Progresso (4).',
+        questions: 'O que há no fundo do rio?'
+    });
+    const { adversary: up, changes } = scaleEntity(env, 3);
+    assert.equal(up.tier, 3);
+    assert.equal(up.difficulty, 16); // +3 por patamar, mantendo o desvio de -1
+    assert.match(up.features[0].text, /Agilidade \(18\)/);
+    assert.match(up.features[0].text, /aumenta para 18/);
+    assert.match(up.features[0].text, /Contagem de Progresso \(4\)/);
+    const dmg = /sofre (\S+) pontos/.exec(up.features[0].text)[1];
+    assert.ok(/^3d/.test(dmg) && Math.abs(average(dmg) - 4.5 * (17 / 6)) <= 2, dmg);
+    assert.ok(changes.length >= 2);
+    assert.equal(scaleEntity(up, 1).adversary.difficulty, 10);
+
+    const actor = toFoundryActor(up);
+    checkEnvironment(actor, up);
+    assert.match(actor.items[0].system.description, /class="secret"/);
+    const action = Object.values(actor.items[0].system.actions)[0];
+    assert.equal(action.save.trait, 'agility');
+    assert.equal(action.cost[0].key, 'fear');
+    const back = fromFoundryActor(JSON.parse(JSON.stringify(actor)));
+    for (const k of ['kind', 'name', 'tier', 'type', 'difficulty', 'impulses', 'adversaries']) assert.equal(back[k], up[k], k);
+    assert.deepEqual(
+        back.features.map(f => [f.name, f.form, f.text, f.questions]),
+        up.features.map(f => [f.name, f.form, f.text, f.questions])
+    );
+
+    const special = blankEnvironment('event', 2);
+    Object.assign(special, { difficulty: null, difficultyNote: 'igual à do adversário' });
+    assert.equal(scaleEntity(special, 4).adversary.difficulty, null);
+    assert.equal(toFoundryActor(special).system.difficulty, 14);
+});
+
 const libFile = new URL('../data/library.json', import.meta.url);
 if (existsSync(libFile)) {
     test('biblioteca local: toda ficha exporta e escala para os 4 patamares', () => {
-        const { adversaries } = JSON.parse(readFileSync(libFile, 'utf8'));
+        const { adversaries, environments = [] } = JSON.parse(readFileSync(libFile, 'utf8'));
         assert.ok(adversaries.length > 0);
         for (const adv of adversaries) {
             checkActor(toFoundryActor(adv), adv);
@@ -170,7 +223,16 @@ if (existsSync(libFile)) {
                 prev = adversary;
             }
         }
-        console.log(`    ${adversaries.length} fichas verificadas`);
+        for (const env of environments) {
+            let prev = null;
+            for (let t = 1; t <= 4; t++) {
+                const { adversary } = scaleEntity(env, t);
+                checkEnvironment(toFoundryActor(adversary), adversary);
+                if (prev && env.difficulty !== null) assert.equal(adversary.difficulty - prev.difficulty, 3, env.name);
+                prev = adversary;
+            }
+        }
+        console.log(`    ${adversaries.length} adversários e ${environments.length} ambientes verificados`);
     });
 } else console.log('--  data/library.json ausente: teste da biblioteca local pulado');
 

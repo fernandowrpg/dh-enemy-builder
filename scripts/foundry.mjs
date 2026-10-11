@@ -76,7 +76,7 @@ function contextEntry(options) {
         dhForge: true,
         name: 'Abrir na Forja de Antagonistas',
         icon: '<i class="fa-solid fa-hammer"></i>',
-        condition: li => game.user.isGM && actorOf(li)?.type === 'adversary',
+        condition: li => game.user.isGM && ['adversary', 'environment'].includes(actorOf(li)?.type),
         callback: li => openForge(fromFoundryActor(actorOf(li).toObject()))
     });
 }

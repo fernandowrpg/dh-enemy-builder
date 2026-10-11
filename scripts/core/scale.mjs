@@ -1,4 +1,4 @@
-import { BENCH, HORDE_RATIO, MINION_VALUE, TEMPLATES, bench } from './rules.mjs';
+import { BENCH, ENV_BENCH, HORDE_RATIO, MINION_VALUE, TEMPLATES, bench, isEnvironment } from './rules.mjs';
 import { FORMULA_IN_TEXT, average, fitFormula, scaleFormula } from './dice.mjs';
 
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -84,7 +84,9 @@ export function scaleFeatureText(text, ctx) {
     // Dificuldade explícita: "teste de reação de Agilidade (14)" e "Dificuldade 11 +"
     if (difficultyDelta) {
         out = out.replace(/(teste[^.()]{0,80}\()(\d{1,2})(?=[) ])/gi, (m, pre, n) => `${pre}${Number(n) + difficultyDelta}`);
-        out = out.replace(/(Dificuldade )(\d{1,2})\b/g, (m, pre, n) => `${pre}${Number(n) + difficultyDelta}`);
+        // "Dificuldade 11 + ..." e "a Dificuldade do ambiente aumenta para 14"
+        // (bônus como "Dificuldade aumenta em +3" ficam como estão)
+        out = out.replace(/(Dificuldade (?:[^.\d()+]{0,40}? para )?)(\d{1,2})\b/g, (m, pre, n) => `${pre}${Number(n) + difficultyDelta}`);
     }
     return out;
 }
@@ -175,17 +177,81 @@ export function scaleAdversary(source, to) {
 export function adaptFeature(feature, origin, target) {
     const f = newFeature(clone(feature));
     delete f.origin;
+    if (!isEnvironment(target)) delete f.questions;
     if (!origin || /^(Lacaio|Horda)\s*\(/i.test(f.name)) return f;
-    const a = bench(origin.type, origin.tier);
-    const b = bench(target.type, target.tier);
     if (origin.tier === target.tier) return f;
+    // referência de dano e Dificuldade de quem cede e de quem recebe a habilidade
+    const ref = e => (isEnvironment(e) ? ENV_BENCH[e.tier] : { difficulty: bench(e.type, e.tier).difficulty, damage: bench('standard', e.tier).damage });
+    const a = ref(origin);
+    const b = ref(target);
     f.text = scaleFeatureText(f.text, {
-        ratio: bench('standard', target.tier).damage / bench('standard', origin.tier).damage,
+        ratio: b.damage / a.damage,
         diceDelta: target.tier - origin.tier,
         difficultyDelta: b.difficulty - a.difficulty
     });
     return f;
 }
+
+/* -------------------------------------------- */
+/*  Ambientes                                   */
+/* -------------------------------------------- */
+
+export function blankEnvironment(type = 'exploration', tier = 1) {
+    return {
+        kind: 'environment',
+        id: `meu:${uid()}`,
+        name: 'Novo ambiente',
+        source: 'Meus antagonistas',
+        tier,
+        type,
+        description: '',
+        impulses: '',
+        difficulty: ENV_BENCH[tier].difficulty,
+        difficultyNote: '',
+        adversaries: '',
+        features: []
+    };
+}
+
+/**
+ * Muda o patamar de um ambiente como o livro orienta (Adaptando Ambientes): ajusta a Dificuldade padrão,
+ * as Dificuldades citadas nas habilidades e o dano que elas causam.
+ */
+export function scaleEnvironment(source, to) {
+    const env = clone(source);
+    const from = env.tier;
+    if (from === to) return { adversary: env, changes: [], notes: [] };
+    const a = ENV_BENCH[from];
+    const b = ENV_BENCH[to];
+    const changes = [];
+    const difficultyDelta = b.difficulty - a.difficulty;
+    if (env.difficulty !== null && env.difficulty !== undefined) {
+        const next = Math.max(5, env.difficulty + difficultyDelta);
+        changes.push({ label: 'Dificuldade', before: env.difficulty, after: next });
+        env.difficulty = next;
+    }
+    env.tier = to;
+    const ctx = { from, to, ratio: b.damage / a.damage, diceDelta: to - from, difficultyDelta };
+    env.features = env.features.map(f => {
+        const g = clone(f);
+        g.text = scaleFeatureText(f.text, ctx);
+        if (g.fx?.damage) g.fx.damage = scaleFormula(g.fx.damage, ctx.ratio, ctx.diceDelta);
+        if (g.text !== f.text) changes.push({ label: f.name, before: 'números do texto', after: 'ajustados' });
+        return g;
+    });
+
+    const notes = [];
+    if (env.adversaries) notes.push(`Adversários sugeridos (${env.adversaries}): troque por outros do ${to}º patamar ou mude o patamar dos originais na Forja.`);
+    if (env.features.some(f => /invo(car|que|ca)\b/i.test(f.text))) notes.push('Há habilidades que invocam adversários: substitua o adversário citado por um adequado ao novo patamar.');
+    const hasFear = env.features.some(f => /gaste \d+ pontos? de medo/i.test(f.text));
+    if (to > from && !hasFear) notes.push('Ao subir de patamar, considere adicionar uma habilidade de Medo: este ambiente ainda não tem nenhuma.');
+    if (to < from) notes.push('Ao descer de patamar, considere remover a habilidade mais poderosa ou impactante.');
+    notes.push('Contagens, condições e efeitos sem dano não são alterados automaticamente.');
+    return { adversary: env, changes, notes };
+}
+
+/** Muda o patamar de qualquer ficha da Forja (adversário ou ambiente). */
+export const scaleEntity = (entity, to) => (isEnvironment(entity) ? scaleEnvironment(entity, to) : scaleAdversary(entity, to));
 
 /** Compara as estatísticas com o típico do tipo/patamar: devolve -1 (abaixo), 0 (na faixa) ou 1 (acima) por campo. */
 export function compareToBenchmark(adv) {

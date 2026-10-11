@@ -2,9 +2,9 @@
  * Interface da Forja de Antagonistas. Roda tanto dentro do Foundry (janela do módulo)
  * quanto como página avulsa; o `host` isola o que muda entre os dois ambientes.
  */
-import { DAMAGE_ABBR, DAMAGE_TYPES, FORMS, IMPROVISED, RANGES, TEMPLATES, TIERS, TIER_LEVELS, TRAITS, TYPES, bench } from './core/rules.mjs';
+import { DAMAGE_ABBR, DAMAGE_TYPES, ENV_BENCH, ENV_TYPES, FORMS, IMPROVISED, RANGES, TEMPLATES, TIERS, TIER_LEVELS, TRAITS, TYPES, bench, isEnvironment } from './core/rules.mjs';
 import { average } from './core/dice.mjs';
-import { adaptFeature, applyBenchmark, blankAdversary, compareToBenchmark, ensureTypeFeatures, newFeature, scaleAdversary } from './core/scale.mjs';
+import { adaptFeature, applyBenchmark, blankAdversary, blankEnvironment, compareToBenchmark, ensureTypeFeatures, newFeature, scaleEntity } from './core/scale.mjs';
 import { deriveFx, toFoundryActor } from './core/foundry-data.mjs';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -20,8 +20,8 @@ const PAGE = 60;
 
 export async function mountForge(root, host, { initial } = {}) {
     const state = {
-        library: { adversaries: [], sources: [] },
-        mine: { adversaries: [], features: [] },
+        library: { adversaries: [], environments: [], sources: [] },
+        mine: { adversaries: [], environments: [], features: [] },
         current: null,
         undo: null,
         lastScale: null,
@@ -35,6 +35,7 @@ export async function mountForge(root, host, { initial } = {}) {
     /* ---------- dados ---------- */
 
     const stored = await host.storage.get('library');
+    const fixLibrary = () => (state.library.environments ??= []); // bibliotecas geradas antes dos ambientes
     if (stored?.adversaries?.length) state.library = stored;
     else if (host.libraryUrl) {
         try {
@@ -44,14 +45,21 @@ export async function mountForge(root, host, { initial } = {}) {
             /* sem biblioteca local: a ferramenta funciona só com as criações do usuário */
         }
     }
-    state.mine = { adversaries: [], features: [], ...((await host.storage.get('mine')) ?? {}) };
+    fixLibrary();
+    state.mine = { adversaries: [], environments: [], features: [], ...((await host.storage.get('mine')) ?? {}) };
     state.current = initial ?? (await host.storage.get('draft')) ?? blankAdversary();
     normalize(state.current);
 
     function normalize(adv) {
         adv.features ??= [];
-        adv.experiences ??= [];
         adv.features.forEach(f => (f.key ??= uid()));
+        if (isEnvironment(adv)) {
+            adv.incident ??= { name: '', text: '' };
+            adv.adversaries ??= '';
+            adv.difficultyNote ??= '';
+            return adv;
+        }
+        adv.experiences ??= [];
         adv.hordeHp ??= 1;
         return adv;
     }
@@ -64,18 +72,20 @@ export async function mountForge(root, host, { initial } = {}) {
     const saveMine = () => host.storage.set('mine', state.mine);
 
     const allAdversaries = () => [...state.mine.adversaries, ...state.library.adversaries];
+    const allEnvironments = () => [...state.mine.environments, ...state.library.environments];
+    const typeLabel = e => (isEnvironment(e) ? ENV_TYPES[e.type]?.label : TYPES[e.type]?.label) ?? e.type;
 
     /** Habilidades únicas (nome + texto), com a origem de onde foram tiradas. */
     function allFeatures() {
         const map = new Map();
         for (const f of state.mine.features)
-            map.set(`meu|${f.key}`, { ...f, origin: { name: 'Minhas habilidades', tier: f.tier ?? 1, type: f.type ?? 'standard', source: 'Meus antagonistas' }, mine: true, count: 1 });
-        for (const adv of allAdversaries())
+            map.set(`meu|${f.key}`, { ...f, origin: { kind: f.kind, name: 'Minhas habilidades', tier: f.tier ?? 1, type: f.type ?? 'standard', source: 'Meus antagonistas' }, mine: true, count: 1 });
+        for (const adv of [...allAdversaries(), ...allEnvironments()])
             for (const f of adv.features) {
                 const key = `${fold(f.name)}|${fold(f.text)}`;
                 const prev = map.get(key);
                 if (prev) prev.count++;
-                else map.set(key, { ...f, origin: { name: adv.name, tier: adv.tier, type: adv.type, source: adv.source }, count: 1 });
+                else map.set(key, { ...f, origin: { kind: adv.kind, name: adv.name, tier: adv.tier, type: adv.type, source: adv.source }, count: 1 });
             }
         return [...map.values()];
     }
@@ -85,6 +95,14 @@ export async function mountForge(root, host, { initial } = {}) {
     function filtered() {
         const q = fold(state.query);
         const { tier, type, source, form } = state.filters;
+        if (state.tab === 'environments')
+            return allEnvironments().filter(
+                e =>
+                    (!tier || e.tier === Number(tier)) &&
+                    (!type || e.type === type) &&
+                    (!source || e.source === source) &&
+                    (!q || fold(`${e.name} ${e.impulses} ${e.adversaries} ${e.features.map(f => f.name).join(' ')}`).includes(q))
+            );
         if (state.tab === 'adversaries')
             return allAdversaries().filter(
                 a =>
@@ -108,7 +126,16 @@ export async function mountForge(root, host, { initial } = {}) {
         const items = filtered();
         const shown = items.slice(0, state.limit);
         const list =
-            state.tab === 'adversaries'
+            state.tab === 'environments'
+                ? shown
+                      .map(
+                          e => `<li class="dhf-item" data-act="load" data-id="${esc(e.id)}" title="Carregar como base">
+                            <div class="dhf-item-head"><strong>${esc(e.name)}</strong><span class="dhf-tier">${e.tier}º</span></div>
+                            <div class="dhf-meta">${esc(typeLabel(e))} · Dif ${e.difficulty ?? 'especial'} · ${e.features.length} habilidades · ${esc(e.source)}</div>
+                          </li>`
+                      )
+                      .join('')
+                : state.tab === 'adversaries'
                 ? shown
                       .map(
                           a => `<li class="dhf-item" data-act="load" data-id="${esc(a.id)}" title="Carregar como base">
@@ -137,12 +164,13 @@ export async function mountForge(root, host, { initial } = {}) {
         root.querySelector('[data-region="library"]').innerHTML = `
             <div class="dhf-tabs">
               <button class="${state.tab === 'adversaries' ? 'on' : ''}" data-act="tab" data-tab="adversaries">Adversários</button>
+              <button class="${state.tab === 'environments' ? 'on' : ''}" data-act="tab" data-tab="environments">Ambientes</button>
               <button class="${state.tab === 'features' ? 'on' : ''}" data-act="tab" data-tab="features">Habilidades</button>
             </div>
             <input class="dhf-search" type="search" placeholder="Buscar por nome, texto, origem…" value="${esc(state.query)}" data-filter="query">
             <div class="dhf-filters">
               <select data-filter="tier"><option value="">Patamar</option>${options(Object.fromEntries(TIERS.map(t => [t, `${t}º`])), state.filters.tier)}</select>
-              <select data-filter="type"><option value="">Tipo</option>${options(TYPES, state.filters.type, t => t.label)}</select>
+              <select data-filter="type"><option value="">Tipo</option>${options(state.tab === 'environments' ? ENV_TYPES : TYPES, state.filters.type, t => t.label)}</select>
               ${state.tab === 'features' ? `<select data-filter="form"><option value="">Forma</option>${options(FORMS, state.filters.form)}</select>` : ''}
               <select data-filter="source"><option value="">Fonte</option>${options(Object.fromEntries(sources.map(s => [s, s])), state.filters.source)}</select>
             </div>
@@ -184,6 +212,7 @@ export async function mountForge(root, host, { initial } = {}) {
               <button data-act="feat-del" title="Remover">✕</button>
             </div>
             <textarea data-ff="text" rows="3" placeholder="Texto da habilidade. Custos como “marque 1 Ponto de Fadiga”, danos como “2d6+3 pontos de dano físico” e testes de reação são reconhecidos automaticamente.">${esc(f.text)}</textarea>
+            ${isEnvironment(state.current) ? `<textarea data-ff="questions" rows="2" placeholder="Perguntas de inspiração (opcional): O que há no fundo do rio? Quem já passou por aqui?">${esc(f.questions ?? '')}</textarea>` : ''}
             <details ${f.fx ? 'open' : ''}>
               <summary>No Foundry: <span data-chips>${chips(f)}</span></summary>
               <div class="dhf-fx">
@@ -201,7 +230,45 @@ export async function mountForge(root, host, { initial } = {}) {
           </div>`;
     }
 
+    function renderEnvironmentEditor() {
+        const e = state.current;
+        const b = ENV_BENCH[e.tier];
+        root.querySelector('[data-region="editor"]').innerHTML = `
+            <section>
+              <div class="dhf-row">
+                <label class="dhf-grow">Nome do ambiente<input data-f="name" value="${esc(e.name)}"></label>
+                <label>Patamar<select data-f="tier" data-num data-rerender>${options(Object.fromEntries(TIERS.map(t => [t, `${t}º (${TIER_LEVELS[t]})`])), e.tier)}</select></label>
+                <label>Tipo<select data-f="type" data-rerender>${options(ENV_TYPES, e.type, t => t.label)}</select></label>
+              </div>
+              <div class="dhf-hint">
+                <p><strong>${esc(ENV_TYPES[e.type].label)}:</strong> ${esc(ENV_TYPES[e.type].hint)}</p>
+                <p>Ambientes do ${e.tier}º patamar (tabela do livro): Dificuldade ${b.difficulty} · dano das habilidades de ${b.damageRange}.</p>
+                <button data-act="benchmark">Aplicar Dificuldade típica</button>
+              </div>
+              <label>Descrição<textarea data-f="description" rows="2">${esc(e.description)}</textarea></label>
+              <label>Impulsos<input data-f="impulses" value="${esc(e.impulses)}" placeholder="arrastar despreparados, dividir a terra…"></label>
+              <div class="dhf-row">
+                <label class="dhf-narrow">Dificuldade<input type="number" data-f="difficulty" data-nullable value="${e.difficulty ?? ''}" placeholder="—"></label>
+                <label class="dhf-grow">Dificuldade especial (se não for um número)<input data-f="difficultyNote" value="${esc(e.difficultyNote)}" placeholder="Ex.: igual à do adversário com a Dificuldade mais alta"></label>
+              </div>
+              <label>Adversários sugeridos<input data-f="adversaries" value="${esc(e.adversaries)}" placeholder="feras (urso, cobra-de-vidro), bandidos…"></label>
+            </section>
+
+            <section>
+              <h3>Habilidades <button data-act="feat-add">+ Nova habilidade</button></h3>
+              <p class="dhf-muted">Use a aba <em>Habilidades</em> da biblioteca para reaproveitar habilidades de outros ambientes ou de adversários.</p>
+              ${e.features.map((f, i) => featureCard(f, i, e.features.length)).join('')}
+            </section>
+
+            <section>
+              <h3>Incidente incitante <span class="dhf-muted">(opcional — vai para as Notas no Foundry)</span></h3>
+              <label>Título<input data-f="incident.name" value="${esc(e.incident.name)}"></label>
+              <label>Gancho de aventura<textarea data-f="incident.text" rows="5">${esc(e.incident.text)}</textarea></label>
+            </section>`;
+    }
+
     function renderEditor() {
+        if (isEnvironment(state.current)) return renderEnvironmentEditor();
         const a = state.current;
         const b = bench(a.type, a.tier);
         const imp = IMPROVISED[a.tier];
@@ -268,7 +335,35 @@ export async function mountForge(root, host, { initial } = {}) {
 
     /* ---------- prévia e exportação (coluna direita) ---------- */
 
+    function environmentStatblock(e) {
+        return `<article class="dhf-sheet">
+            <h2>${esc(e.name)}</h2>
+            <div class="dhf-sub">${esc(ENV_TYPES[e.type].label)} (${e.tier}º patamar)</div>
+            ${e.description ? `<p class="dhf-desc">${esc(e.description)}</p>` : ''}
+            ${e.impulses ? `<p><strong>Impulsos:</strong> ${esc(e.impulses)}</p>` : ''}
+            <div class="dhf-stats">
+              <div><strong>Dificuldade:</strong> ${e.difficulty ?? esc(e.difficultyNote || 'especial')}</div>
+              <div><strong>Adversários:</strong> ${esc(e.adversaries || 'quaisquer')}</div>
+            </div>
+            ${e.features.length ? '<h4>Habilidades</h4>' : ''}
+            ${e.features.map(f => `<p class="dhf-ability"><strong>${esc(f.name)} (${FORMS[f.form]}):</strong> ${esc(f.text)}${f.questions ? ` <em>${esc(f.questions)}</em>` : ''}</p>`).join('')}
+            ${e.incident?.text ? `<h4>${esc(e.incident.name || 'Incidente incitante')}</h4>${e.incident.text.split(/\n+/).map(par => `<p>${esc(par)}</p>`).join('')}` : ''}
+          </article>`;
+    }
+
+    function environmentComparison(e) {
+        const b = ENV_BENCH[e.tier];
+        const mark = e.difficulty === null ? '<span class="dhf-muted">especial</span>' : e.difficulty > b.difficulty + 1 ? '<span class="dhf-high">▲ acima</span>' : e.difficulty < b.difficulty - 1 ? '<span class="dhf-low">▼ abaixo</span>' : '<span class="dhf-ok">● típico</span>';
+        const fear = e.features.filter(f => /gaste \d+ pontos? de medo/i.test(f.text)).length;
+        return `<table class="dhf-cmp">
+              <tr><td>Dificuldade</td><td>${e.difficulty ?? '—'}</td><td>${mark}</td></tr>
+              <tr><td>Dano típico</td><td colspan="2">${b.damageRange}</td></tr>
+              <tr><td>Habilidades de Medo</td><td>${fear}</td><td>${fear ? '' : '<span class="dhf-muted">nenhuma</span>'}</td></tr>
+            </table>`;
+    }
+
     function statblock(a) {
+        if (isEnvironment(a)) return environmentStatblock(a);
         const isMinion = a.type === 'minion';
         const thresholds = isMinion || (!a.major && !a.severe) ? 'nenhum' : `${a.major}/${a.severe || '—'}`;
         return `<article class="dhf-sheet">
@@ -288,9 +383,10 @@ export async function mountForge(root, host, { initial } = {}) {
 
     function renderOutput() {
         const a = state.current;
-        const cmp = compareToBenchmark(a);
+        const env = isEnvironment(a);
+        const cmp = env ? {} : compareToBenchmark(a);
         const mark = { '-1': '<span class="dhf-low">▼ abaixo</span>', 0: '<span class="dhf-ok">● típico</span>', 1: '<span class="dhf-high">▲ acima</span>' };
-        const rows = [
+        const rows = env ? [] : [
             ['Dificuldade', a.difficulty, cmp.difficulty],
             ...(a.type === 'minion' ? [] : [['Limiares', `${a.major}/${a.severe}`, Math.sign(cmp.major + cmp.severe)], ['PV', a.hp, cmp.hp], ['PF', a.stress, cmp.stress]]),
             ['ATQ', signed(a.attack.bonus), cmp.attack],
@@ -309,13 +405,15 @@ export async function mountForge(root, host, { initial } = {}) {
                       ? `<div class="dhf-changes"><strong>${scale.from}º → ${scale.to}º patamar</strong>
                          <ul>${scale.changes.map(c => `<li>${esc(c.label)}: <s>${esc(c.before)}</s> → <b>${esc(c.after)}</b></li>`).join('')}</ul>
                          ${scale.notes.map(n => `<p class="dhf-note">${esc(n)}</p>`).join('')}</div>`
-                      : '<p class="dhf-muted">Recalcula Dificuldade, limiares, PV, PF, ataque, dano e os números das habilidades, preservando o quanto a ficha foge do típico do seu tipo.</p>'
+                      : env
+                        ? '<p class="dhf-muted">Ajusta a Dificuldade padrão, as Dificuldades citadas nas habilidades e o dano que elas causam, como orienta o livro em “Adaptando Ambientes”.</p>'
+                        : '<p class="dhf-muted">Recalcula Dificuldade, limiares, PV, PF, ataque, dano e os números das habilidades, preservando o quanto a ficha foge do típico do seu tipo.</p>'
               }
             </section>
             <section>
               <h3>Comparação com o típico</h3>
-              <table class="dhf-cmp">${rows.map(([l, v, c]) => `<tr><td>${l}</td><td>${v}</td><td>${mark[c]}</td></tr>`).join('')}</table>
-              <p class="dhf-muted">Custa ${TYPES[a.type].bp} Ponto${TYPES[a.type].bp > 1 ? 's' : ''} de Batalha${a.type === 'minion' ? ' por grupo de lacaios do tamanho do grupo de personagens' : ''}.</p>
+              ${env ? environmentComparison(a) : `<table class="dhf-cmp">${rows.map(([l, v, c]) => `<tr><td>${l}</td><td>${v}</td><td>${mark[c]}</td></tr>`).join('')}</table>`}
+              ${env ? '' : `<p class="dhf-muted">Custa ${TYPES[a.type].bp} Ponto${TYPES[a.type].bp > 1 ? 's' : ''} de Batalha${a.type === 'minion' ? ' por grupo de lacaios do tamanho do grupo de personagens' : ''}.</p>`}
             </section>
             <section>
               <h3>Ficha</h3>
@@ -324,9 +422,9 @@ export async function mountForge(root, host, { initial } = {}) {
                 ${host.createActor ? '<button class="dhf-primary" data-act="create">Criar no Foundry</button>' : ''}
                 <button class="${host.createActor ? '' : 'dhf-primary'}" data-act="download">Baixar JSON do Foundry</button>
                 <button data-act="copy">Copiar JSON</button>
-                <button data-act="save-mine">Salvar em Meus antagonistas</button>
+                <button data-act="save-mine">Salvar em ${env ? 'Meus ambientes' : 'Meus antagonistas'}</button>
               </div>
-              ${host.createActor ? '' : '<p class="dhf-muted">No Foundry: crie um Ator do tipo Adversário, clique nele com o botão direito → <em>Importar Dados</em> e escolha o arquivo baixado.</p>'}
+              ${host.createActor ? '' : `<p class="dhf-muted">No Foundry: crie um Ator do tipo ${env ? 'Ambiente' : 'Adversário'}, clique nele com o botão direito → <em>Importar Dados</em> e escolha o arquivo baixado.</p>`}
             </section>`;
     }
 
@@ -381,6 +479,7 @@ export async function mountForge(root, host, { initial } = {}) {
     const actions = {
         tab: el => {
             state.tab = el.dataset.tab;
+            state.filters.type = '';
             state.limit = PAGE;
             renderLibrary();
         },
@@ -389,7 +488,7 @@ export async function mountForge(root, host, { initial } = {}) {
             renderLibrary();
         },
         load: el => {
-            const src = allAdversaries().find(a => a.id === el.dataset.id);
+            const src = [...allAdversaries(), ...allEnvironments()].find(a => a.id === el.dataset.id);
             if (!src) return;
             const adv = clone(src);
             if (!String(adv.id).startsWith('meu:')) {
@@ -401,7 +500,7 @@ export async function mountForge(root, host, { initial } = {}) {
         'add-feature': el => {
             const f = libraryCache[Number(el.dataset.i)];
             if (!f) return;
-            const { origin, count, mine, ...data } = f;
+            const { origin, count, mine, kind, tier, type, ...data } = f;
             state.current.features.push(state.adapt ? adaptFeature(data, origin, state.current) : newFeature(clone(data)));
             setCurrent(state.current, { keepUndo: true });
             host.notify(`“${f.name}” adicionada à ficha.`);
@@ -411,8 +510,13 @@ export async function mountForge(root, host, { initial } = {}) {
             saveMine();
             renderLibrary();
         },
-        new: () => setCurrent(blankAdversary(state.current.type, state.current.tier)),
-        benchmark: () => setCurrent(applyBenchmark(state.current), { keepUndo: true }),
+        new: () => setCurrent(isEnvironment(state.current) ? blankAdversary('standard', state.current.tier) : blankAdversary(state.current.type, state.current.tier)),
+        'new-env': () => setCurrent(blankEnvironment('exploration', state.current.tier)),
+        benchmark: () => {
+            if (isEnvironment(state.current)) Object.assign(state.current, { difficulty: ENV_BENCH[state.current.tier].difficulty, difficultyNote: '' });
+            else applyBenchmark(state.current);
+            setCurrent(state.current, { keepUndo: true });
+        },
         'exp-add': () => {
             state.current.experiences.push({ name: '', value: state.current.tier >= 3 ? 3 : 2 });
             setCurrent(state.current, { keepUndo: true });
@@ -438,7 +542,7 @@ export async function mountForge(root, host, { initial } = {}) {
         'feat-down': el => moveFeature(el, 1),
         'feat-save': el => {
             const f = state.current.features[Number(el.closest('[data-fi]').dataset.fi)];
-            state.mine.features.unshift({ ...clone(f), key: uid(), tier: state.current.tier, type: state.current.type });
+            state.mine.features.unshift({ ...clone(f), key: uid(), tier: state.current.tier, type: state.current.type, kind: state.current.kind });
             saveMine();
             renderLibrary();
             host.notify(`“${f.name}” guardada em Minhas habilidades.`);
@@ -450,7 +554,7 @@ export async function mountForge(root, host, { initial } = {}) {
         scale: el => {
             const to = Number(el.dataset.tier);
             const from = state.current.tier;
-            const { adversary, changes, notes } = scaleAdversary(state.current, to);
+            const { adversary, changes, notes } = scaleEntity(state.current, to);
             state.undo = clone(state.current);
             state.lastScale = { from, to, changes, notes };
             setCurrent(adversary, { keepUndo: true });
@@ -461,12 +565,13 @@ export async function mountForge(root, host, { initial } = {}) {
         'save-mine': () => {
             const adv = clone(state.current);
             adv.source = 'Meus antagonistas';
-            const i = state.mine.adversaries.findIndex(a => a.id === adv.id);
-            if (i >= 0) state.mine.adversaries[i] = adv;
-            else state.mine.adversaries.unshift(adv);
+            const list = isEnvironment(adv) ? state.mine.environments : state.mine.adversaries;
+            const i = list.findIndex(a => a.id === adv.id);
+            if (i >= 0) list[i] = adv;
+            else list.unshift(adv);
             saveMine();
             renderLibrary();
-            host.notify(`“${adv.name}” salvo em Meus antagonistas.`);
+            host.notify(`“${adv.name}” salvo em ${isEnvironment(adv) ? 'Meus ambientes' : 'Meus antagonistas'}.`);
         },
         download: () => download(`fvtt-Actor-${slug(state.current.name)}.json`, toFoundryActor(state.current)),
         copy: async () => {
@@ -475,24 +580,26 @@ export async function mountForge(root, host, { initial } = {}) {
         },
         create: async () => {
             const actor = await host.createActor(toFoundryActor(state.current));
-            if (actor) host.notify(`Adversário “${state.current.name}” criado no Foundry.`);
+            if (actor) host.notify(`“${state.current.name}” criado no Foundry.`);
         },
         'import-library': async () => {
             const data = await pickFile();
             if (!data) return;
             if (!Array.isArray(data.adversaries)) return host.notify('Este arquivo não é uma biblioteca da Forja (data/library.json).', 'error');
             state.library = data;
+            fixLibrary();
             await host.storage.set('library', data);
             renderLibrary();
-            host.notify(`Biblioteca importada: ${data.adversaries.length} adversários.`);
+            host.notify(`Biblioteca importada: ${data.adversaries.length} adversários e ${data.environments.length} ambientes.`);
         },
         'export-mine': () => download('forja-meus-dados.json', { format: 1, mine: state.mine }),
         'import-mine': async () => {
             const data = await pickFile();
             if (!data?.mine) return data && host.notify('Este arquivo não contém dados exportados pela Forja.', 'error');
-            const ids = new Set(state.mine.adversaries.map(a => a.id));
+            const ids = new Set([...state.mine.adversaries, ...state.mine.environments].map(a => a.id));
             const keys = new Set(state.mine.features.map(f => f.key));
             state.mine.adversaries.push(...(data.mine.adversaries ?? []).filter(a => !ids.has(a.id)));
+            state.mine.environments.push(...(data.mine.environments ?? []).filter(a => !ids.has(a.id)));
             state.mine.features.push(...(data.mine.features ?? []).filter(f => !keys.has(f.key)));
             saveMine();
             renderLibrary();
@@ -516,7 +623,14 @@ export async function mountForge(root, host, { initial } = {}) {
 
     root.addEventListener('input', ev => {
         const el = ev.target;
-        const value = el.type === 'checkbox' ? el.checked : el.type === 'number' || el.dataset.num !== undefined ? Number(el.value) || 0 : el.value;
+        const value =
+            el.type === 'checkbox'
+                ? el.checked
+                : el.dataset.nullable !== undefined && el.value === ''
+                  ? null
+                  : el.type === 'number' || el.dataset.num !== undefined
+                    ? Number(el.value) || 0
+                    : el.value;
         if (el.dataset.filter) {
             if (el.dataset.filter === 'query') state.query = el.value;
             else if (el.dataset.filter === 'adapt') return void (state.adapt = el.checked);
@@ -535,7 +649,7 @@ export async function mountForge(root, host, { initial } = {}) {
         if (el.dataset.f) {
             setPath(state.current, el.dataset.f, value);
             if (el.dataset.rerender !== undefined) {
-                if (el.dataset.f === 'type') ensureTypeFeatures(state.current);
+                if (el.dataset.f === 'type' && !isEnvironment(state.current)) ensureTypeFeatures(state.current);
                 state.lastScale = null;
                 return setCurrent(state.current, { keepUndo: true });
             }
@@ -561,9 +675,10 @@ export async function mountForge(root, host, { initial } = {}) {
     root.classList.add('dhf');
     root.innerHTML = `
         <header class="dhf-top">
-          <div class="dhf-brand"><span>⚔</span> Forja de Antagonistas <small>Daggerheart</small></div>
+          <div class="dhf-brand"><span>⚔</span> Forja de Antagonistas <small>e Ambientes · Daggerheart</small></div>
           <div class="dhf-toolbar">
             <button data-act="new">Novo antagonista</button>
+            <button data-act="new-env">Novo ambiente</button>
             <button data-act="import-library" title="Carrega o data/library.json gerado a partir dos seus PDFs">Importar biblioteca</button>
             <button data-act="export-mine" title="Baixa seus antagonistas e habilidades salvos">Exportar meus dados</button>
             <button data-act="import-mine">Importar meus dados</button>

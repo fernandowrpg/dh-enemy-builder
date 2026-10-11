@@ -52,6 +52,30 @@ export const IMPROVISED = {
     4: { attack: 4, damage: '4d8+10 até 4d12+15', difficulty: 20, major: 25, severe: 45 }
 };
 
+/* -------------------------------------------- */
+/*  Ambientes                                   */
+/* -------------------------------------------- */
+
+export const ENV_TYPES = {
+    exploration: { label: 'Exploração', hint: 'Lugares cheios de mistérios e maravilhas a serem descobertas.' },
+    social: { label: 'Social', hint: 'Lugares que costumam apresentar desafios interpessoais.' },
+    traversal: { label: 'Travessia', hint: 'Locais perigosos, em que se mover pelo espaço já é um desafio.' },
+    event: { label: 'Evento', hint: 'Definidos mais pelo que está acontecendo do que pelo lugar em si.' }
+};
+
+/**
+ * Tabela "Estatísticas de Ambientes por Patamar" (Livro Básico, Adaptando Ambientes).
+ * `damage` é a média do meio da faixa de dados de dano, usada para escalar as habilidades.
+ */
+export const ENV_BENCH = {
+    1: { difficulty: 11, damageRange: '1d6+1 até 1d8+3', damage: 6 },
+    2: { difficulty: 14, damageRange: '2d6+3 até 2d10+2', damage: 11.5 },
+    3: { difficulty: 17, damageRange: '3d8+3 até 3d10+1', damage: 17 },
+    4: { difficulty: 20, damageRange: '4d8+3 até 4d10+10', damage: 26.5 }
+};
+
+export const isEnvironment = entity => entity?.kind === 'environment';
+
 const row = ([difficulty, major, severe, hp, stress, attack, damage]) => ({ difficulty, major, severe, hp, stress, attack, damage });
 const table = rows => Object.fromEntries(rows.map((r, i) => [i + 1, row(r)]));
 
