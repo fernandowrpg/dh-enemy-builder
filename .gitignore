@@ -1,0 +1,9 @@
+# Biblioteca extraída dos PDFs: contém texto dos livros e não pode ser publicada.
+data/library.json
+*.pdf
+
+node_modules/
+module.zip
+.claude/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forja de Antagonistas — Daggerheart</title>
+<link rel="stylesheet" href="styles/forge.css">
+</head>
+<body class="dhf-page">
+<div id="forge"></div>
+<script type="module">
+import { mountForge } from './scripts/app.mjs';
+import { browserHost } from './scripts/hosts.mjs';
+
+mountForge(document.getElementById('forge'), browserHost());
+</script>
+</body>
+</html>

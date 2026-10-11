@@ -1,0 +1,501 @@
+/* Forja de Antagonistas — tudo fica sob .dhf para não vazar para o Foundry. */
+.dhf {
+    --dhf-bg: #16131c;
+    --dhf-panel: #201c29;
+    --dhf-panel-2: #2a2536;
+    --dhf-line: #3d364d;
+    --dhf-text: #ece7f3;
+    --dhf-dim: #a79fb8;
+    --dhf-gold: #e3b341;
+    --dhf-fear: #b98cff;
+    --dhf-ok: #6fcf97;
+    --dhf-low: #6cb6ff;
+    --dhf-high: #ff8f70;
+    --dhf-paper: #f4ecd9;
+    --dhf-ink: #2b2118;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    color: var(--dhf-text);
+    background: var(--dhf-bg);
+    font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+.dhf *,
+.dhf *::before,
+.dhf *::after {
+    box-sizing: border-box;
+}
+.dhf p {
+    margin: 0 0 6px;
+}
+.dhf h3 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 8px;
+    padding: 0;
+    border: 0;
+    color: var(--dhf-gold);
+    font: 600 13px/1.2 "Segoe UI", system-ui, sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.dhf h3 button {
+    margin-left: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* ---------- topo ---------- */
+.dhf-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--dhf-panel);
+    border-bottom: 1px solid var(--dhf-line);
+}
+.dhf-brand {
+    font-size: 17px;
+    font-weight: 700;
+}
+.dhf-brand span {
+    color: var(--dhf-gold);
+}
+.dhf-brand small {
+    color: var(--dhf-dim);
+    font-weight: 400;
+}
+.dhf-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* ---------- colunas ---------- */
+.dhf-cols {
+    display: grid;
+    grid-template-columns: minmax(250px, 320px) minmax(380px, 1fr) minmax(300px, 400px);
+    flex: 1;
+    min-height: 0;
+}
+.dhf-col {
+    min-height: 0;
+    padding: 12px;
+    overflow-y: auto;
+}
+.dhf-lib,
+.dhf-out {
+    background: var(--dhf-panel);
+}
+.dhf-lib {
+    border-right: 1px solid var(--dhf-line);
+}
+.dhf-out {
+    border-left: 1px solid var(--dhf-line);
+}
+.dhf section {
+    margin-bottom: 16px;
+}
+@media (max-width: 1000px) {
+    .dhf-cols {
+        display: block;
+        overflow-y: auto;
+    }
+    .dhf-col {
+        overflow: visible;
+        border: 0;
+        border-bottom: 1px solid var(--dhf-line);
+    }
+}
+
+/* ---------- controles ---------- */
+.dhf input,
+.dhf select,
+.dhf textarea {
+    width: 100%;
+    height: auto;
+    min-height: 30px;
+    padding: 5px 8px;
+    color: var(--dhf-text);
+    background: var(--dhf-bg);
+    border: 1px solid var(--dhf-line);
+    border-radius: 5px;
+    font: inherit;
+}
+.dhf textarea {
+    resize: vertical;
+}
+.dhf input:focus,
+.dhf select:focus,
+.dhf textarea:focus {
+    outline: 1px solid var(--dhf-gold);
+    border-color: var(--dhf-gold);
+    box-shadow: none;
+}
+.dhf input:disabled {
+    opacity: 0.4;
+}
+.dhf input[type="checkbox"] {
+    width: auto;
+    min-height: 0;
+}
+.dhf select option {
+    color: var(--dhf-text);
+    background: var(--dhf-panel);
+}
+.dhf button {
+    width: auto;
+    height: auto;
+    min-height: 28px;
+    padding: 4px 10px;
+    color: var(--dhf-text);
+    background: var(--dhf-panel-2);
+    border: 1px solid var(--dhf-line);
+    border-radius: 5px;
+    font: inherit;
+    line-height: 1.2;
+    cursor: pointer;
+}
+.dhf button:hover:not(:disabled) {
+    border-color: var(--dhf-gold);
+    box-shadow: none;
+}
+.dhf button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.dhf button.dhf-primary,
+.dhf button.on {
+    color: #1b1404;
+    background: var(--dhf-gold);
+    border-color: var(--dhf-gold);
+    font-weight: 600;
+}
+.dhf button.on:disabled {
+    opacity: 1;
+}
+.dhf label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--dhf-dim);
+    font-size: 12px;
+}
+.dhf label > input,
+.dhf label > select,
+.dhf label > textarea {
+    margin-top: 2px;
+    font-size: 14px;
+}
+.dhf label.dhf-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.dhf-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.dhf .dhf-row > label {
+    margin-bottom: 0;
+}
+.dhf .dhf-row > * {
+    flex: 0 0 auto;
+    width: auto;
+}
+.dhf .dhf-row > .dhf-grow {
+    flex: 1 1 120px;
+    min-width: 0;
+}
+.dhf .dhf-row > .dhf-narrow {
+    width: 84px;
+}
+.dhf-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.dhf-muted {
+    color: var(--dhf-dim);
+    font-size: 12px;
+}
+.dhf code {
+    padding: 1px 4px;
+    background: var(--dhf-bg);
+    border-radius: 3px;
+    font-size: 12px;
+}
+.dhf-hint {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: var(--dhf-panel);
+    border-left: 3px solid var(--dhf-gold);
+    border-radius: 0 5px 5px 0;
+    font-size: 13px;
+}
+
+/* ---------- biblioteca ---------- */
+.dhf-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+.dhf-tabs button {
+    flex: 1;
+}
+.dhf-filters {
+    display: flex;
+    gap: 4px;
+    margin: 6px 0;
+}
+.dhf-filters select {
+    min-width: 0;
+    padding: 4px;
+    font-size: 12px;
+}
+.dhf-count {
+    margin: 6px 0 4px;
+    color: var(--dhf-dim);
+    font-size: 12px;
+}
+.dhf-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.dhf-item {
+    margin: 0 0 4px;
+    padding: 6px 8px;
+    background: var(--dhf-panel-2);
+    border: 1px solid transparent;
+    border-radius: 5px;
+}
+.dhf-item[data-act] {
+    cursor: pointer;
+}
+.dhf-item[data-act]:hover {
+    border-color: var(--dhf-gold);
+}
+.dhf-item-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+.dhf-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    color: var(--dhf-dim);
+    font-size: 12px;
+}
+.dhf-spacer {
+    flex: 1;
+}
+.dhf-text {
+    display: -webkit-box;
+    margin: 3px 0;
+    overflow: hidden;
+    font-size: 12.5px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+}
+.dhf-feat:hover .dhf-text {
+    -webkit-line-clamp: unset;
+}
+.dhf-tier,
+.dhf-form,
+.dhf-chip {
+    display: inline-block;
+    padding: 0 6px;
+    border: 1px solid var(--dhf-line);
+    border-radius: 9px;
+    color: var(--dhf-dim);
+    font-size: 11px;
+    white-space: nowrap;
+}
+.dhf-form-action {
+    color: var(--dhf-high);
+}
+.dhf-form-reaction {
+    color: var(--dhf-low);
+}
+.dhf-chip {
+    margin-right: 3px;
+    color: var(--dhf-text);
+}
+.dhf-chip.dhf-fear {
+    color: var(--dhf-fear);
+    border-color: var(--dhf-fear);
+}
+.dhf-chip.dhf-muted {
+    color: var(--dhf-dim);
+}
+.dhf-more {
+    width: 100% !important;
+    margin-top: 4px;
+}
+.dhf-empty {
+    margin: 8px 0;
+    padding: 10px;
+    border: 1px dashed var(--dhf-line);
+    border-radius: 5px;
+    font-size: 13px;
+}
+
+/* ---------- habilidades ---------- */
+.dhf-feature {
+    margin-bottom: 8px;
+    padding: 8px;
+    background: var(--dhf-panel);
+    border: 1px solid var(--dhf-line);
+    border-radius: 6px;
+}
+.dhf-feature details {
+    margin-top: 4px;
+    font-size: 12px;
+}
+.dhf-feature summary {
+    color: var(--dhf-dim);
+    cursor: pointer;
+}
+.dhf-fx {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    align-items: end;
+    margin-top: 6px;
+}
+.dhf-fx label {
+    margin: 0;
+}
+
+/* ---------- saída ---------- */
+.dhf-tiers {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+.dhf-tiers button {
+    min-width: 42px;
+}
+.dhf-changes {
+    padding: 8px 10px;
+    background: var(--dhf-panel-2);
+    border-radius: 5px;
+    font-size: 13px;
+}
+.dhf-changes ul {
+    margin: 4px 0 6px;
+    padding-left: 18px;
+}
+.dhf-changes s {
+    color: var(--dhf-dim);
+}
+.dhf-changes b {
+    color: var(--dhf-gold);
+}
+.dhf-note {
+    color: var(--dhf-dim);
+    font-size: 12px;
+}
+.dhf-cmp {
+    width: 100%;
+    margin: 0 0 6px;
+    border: 0;
+    border-collapse: collapse;
+    background: none;
+    font-size: 13px;
+}
+.dhf-cmp td {
+    padding: 2px 4px;
+    border-bottom: 1px solid var(--dhf-line);
+}
+.dhf-ok {
+    color: var(--dhf-ok);
+}
+.dhf-low {
+    color: var(--dhf-low);
+}
+.dhf-high {
+    color: var(--dhf-high);
+}
+.dhf-sheet {
+    padding: 12px 14px;
+    color: var(--dhf-ink);
+    background: var(--dhf-paper);
+    border-radius: 6px;
+    font: 13px/1.4 Georgia, "Times New Roman", serif;
+}
+.dhf-sheet h2 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: #7a1f1f;
+    font: 700 18px/1.2 Georgia, serif;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.dhf-sheet h4 {
+    margin: 8px 0 4px;
+    padding: 0;
+    border: 0;
+    color: #7a1f1f;
+    font: 700 12px/1.2 Georgia, serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.dhf-sub {
+    margin-bottom: 4px;
+    font-weight: 700;
+}
+.dhf-desc {
+    font-style: italic;
+}
+.dhf-stats {
+    margin: 6px 0;
+    padding: 6px 8px;
+    background: #e6d9bd;
+    border-radius: 4px;
+}
+.dhf-ability {
+    padding-left: 12px;
+    text-indent: -12px;
+}
+.dhf-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 10px 0 6px;
+}
+
+/* ---------- página avulsa ---------- */
+body.dhf-page {
+    height: 100vh;
+    margin: 0;
+    background: #16131c;
+}
+.dhf-toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    z-index: 10;
+    padding: 8px 14px;
+    color: #1b1404;
+    background: #e3b341;
+    border-radius: 6px;
+    font: 14px "Segoe UI", system-ui, sans-serif;
+    transform: translateX(-50%);
+}
+.dhf-toast.error {
+    color: #fff;
+    background: #b3402f;
+}
