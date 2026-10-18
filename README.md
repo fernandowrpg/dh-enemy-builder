@@ -28,6 +28,9 @@ Funciona de dois jeitos, com o mesmo código:
 - **Ambientes**: crie, edite e mude o patamar de ambientes (Exploração, Social, Travessia, Evento), com impulsos,
   adversários sugeridos, habilidades com perguntas de inspiração e incidente incitante. Saem como ator *Ambiente*;
   as perguntas vão em bloco secreto (só o mestre vê) e o incidente vai para as Notas.
+- **Artes**: escolha retrato e token entre as artes do módulo [Art for Daggerheart](https://github.com/mordachai/art-for-daggerheart)
+  (Mordachai, CC0). A Forja sugere a arte comparando as estatísticas da ficha com as do compêndio do sistema, então
+  funciona com os nomes em português. O token pode ser de variações aleatórias, em círculo ou igual ao retrato, com ou sem anel.
 - **Editar fichas que já estão no Foundry**: botão direito num adversário ou ambiente → *Abrir na Forja de Antagonistas*.
 
 ## Instalação no Foundry
@@ -105,7 +108,9 @@ npm test
 | `scripts/core/foundry-data.mjs` | conversão para/de Actor `adversary` do sistema 1.9.14 |
 | `scripts/app.mjs` | interface (sem dependências) |
 | `scripts/foundry.mjs`, `scripts/hosts.mjs` | integração com o Foundry e com o navegador |
+| `scripts/core/art.mjs` | sugestão e aplicação das artes do Art for Daggerheart |
 | `tools/extract-pdf.mjs` | extrator dos PDFs |
+| `tools/build-art-index.mjs` | gera `data/art-index.json` (`npm run art-index [tag-das-artes] [versão-do-sistema]`) |
 
 Para publicar uma versão: crie uma tag `vX.Y.Z`. O workflow em `.github/workflows/release.yml` roda os testes, grava a
 versão e os links do repositório no `module.json` e anexa `module.json` e `module.zip` à release.

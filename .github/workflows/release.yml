@@ -16,7 +16,7 @@ jobs:
       - run: npm test
       - name: Ajusta versão e links do manifesto
         run: node tools/stamp-manifest.mjs "${GITHUB_REF_NAME#v}" "https://github.com/${GITHUB_REPOSITORY}" "${GITHUB_REF_NAME}"
-      - run: zip -r module.zip module.json LICENSE README.md index.html scripts styles data/README.md
+      - run: zip -r module.zip module.json LICENSE README.md index.html scripts styles data/README.md data/art-index.json
       - uses: softprops/action-gh-release@v2
         with:
           files: |

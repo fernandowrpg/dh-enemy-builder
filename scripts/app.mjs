@@ -6,6 +6,7 @@ import { DAMAGE_ABBR, DAMAGE_TYPES, ENV_BENCH, ENV_TYPES, FORMS, IMPROVISED, RAN
 import { average } from './core/dice.mjs';
 import { adaptFeature, applyBenchmark, blankAdversary, blankEnvironment, compareToBenchmark, ensureTypeFeatures, newFeature, scaleEntity } from './core/scale.mjs';
 import { deriveFx, toFoundryActor } from './core/foundry-data.mjs';
+import { ART_LOCAL, ART_RAW, TOKEN_MODES, applyArt, artFiles, artKey, bestArt, clearArt, previewUrl, suggestArt } from './core/art.mjs';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -29,7 +30,11 @@ export async function mountForge(root, host, { initial } = {}) {
         query: '',
         filters: { tier: '', type: '', source: '', form: '' },
         limit: PAGE,
-        adapt: true
+        adapt: true,
+        artIndex: null,
+        artOpen: false,
+        artQuery: '',
+        artPrefs: { token: 'wildcard', ring: false, source: 'module' }
     };
 
     /* ---------- dados ---------- */
@@ -46,6 +51,13 @@ export async function mountForge(root, host, { initial } = {}) {
         }
     }
     fixLibrary();
+    try {
+        const res = host.artIndexUrl && (await fetch(host.artIndexUrl));
+        if (res?.ok) state.artIndex = await res.json();
+    } catch {
+        /* sem índice de artes: a galeria fica indisponível */
+    }
+    if (host.kind === 'browser') Object.assign(state.artPrefs, (await host.storage.get('art')) ?? {});
     state.mine = { adversaries: [], environments: [], features: [], ...((await host.storage.get('mine')) ?? {}) };
     state.current = initial ?? (await host.storage.get('draft')) ?? blankAdversary();
     normalize(state.current);
@@ -73,6 +85,91 @@ export async function mountForge(root, host, { initial } = {}) {
 
     const allAdversaries = () => [...state.mine.adversaries, ...state.library.adversaries];
     const allEnvironments = () => [...state.mine.environments, ...state.library.environments];
+    /* ---------- artes (Art for Daggerheart) ---------- */
+
+    const inFoundry = host.kind === 'foundry';
+    /** No Foundry decide pelo módulo estar ativo; na página avulsa, o usuário escolhe. */
+    const artBase = () => ((inFoundry ? host.artModuleActive : state.artPrefs.source === 'module') ? ART_LOCAL : ART_RAW(state.artIndex));
+    const shown = path => previewUrl(path, state.artIndex, { inFoundry });
+    /** Estatísticas para comparar: as da ficha original da biblioteca, se a atual mudou de patamar ou foi editada. */
+    const artStats = adv => state.library.adversaries.find(a => a.id === adv.baseId) ?? adv;
+    const artImage = name => state.artIndex?.images.find(i => i.name === name);
+    function useArt(name) {
+        const image = artImage(name);
+        if (!image) return;
+        applyArt(state.current, image, { base: artBase(), token: state.artPrefs.token, ring: state.artPrefs.ring });
+        state.artOpen = false;
+        setCurrent(state.current, { keepUndo: true });
+        renderArt();
+    }
+
+    function artCard(image, extra = '') {
+        const files = artFiles(image, ART_RAW(state.artIndex));
+        const on = state.current.art?.name === image.name;
+        return `<button class="dhf-art-card ${on ? 'on' : ''}" data-act="art-pick" data-name="${esc(image.name)}" title="${esc(image.name)}">
+            <img loading="lazy" src="${esc(files.circle ?? files.portrait)}" alt="">
+            <span>${esc(image.name)}</span>${extra}</button>`;
+    }
+
+    function artGrid() {
+        const q = artKey(state.artQuery);
+        const images = (state.artIndex?.images ?? []).filter(i => !q || artKey(i.name).includes(q));
+        return images.length ? images.map(i => artCard(i)).join('') : '<p class="dhf-muted">Nenhuma arte com esse nome.</p>';
+    }
+
+    function renderArt() {
+        const region = root.querySelector('[data-region="art"]');
+        if (!state.artOpen || isEnvironment(state.current)) return void (region.innerHTML = '');
+        const a = state.current;
+        const idx = state.artIndex;
+        const suggestions = suggestArt(a, idx, { stats: artStats(a) });
+        const p = state.artPrefs;
+        const sourceNote = inFoundry
+            ? host.artModuleActive
+                ? 'Usando os arquivos do módulo <em>Art for Daggerheart</em> instalado.'
+                : 'O módulo <em>Art for Daggerheart</em> não está ativo neste mundo: as imagens serão ligadas pelo GitHub (precisam de internet) e o token usa uma única variação. Instale e ative o módulo para usar os arquivos locais.'
+            : `<label>Imagens<select data-art-opt="source">${options({ module: 'Arquivos do módulo (instalado no Foundry)', url: 'Links do GitHub (sem instalar o módulo)' }, p.source)}</select></label>`;
+        region.innerHTML = `<div class="dhf-modal" data-act="art-close">
+            <div class="dhf-modal-box">
+              <header><h3>Arte de “${esc(a.name)}”</h3><span class="dhf-spacer"></span><button data-act="art-close" title="Fechar (Esc)">✕</button></header>
+              <div class="dhf-art-opts">
+                <label>Token<select data-art-opt="token">${options(TOKEN_MODES, p.token)}</select></label>
+                <label class="dhf-check"><input type="checkbox" data-art-opt="ring" ${p.ring ? 'checked' : ''}> anel de token do Foundry</label>
+                ${inFoundry ? '' : sourceNote}
+                ${a.art ? '<button data-act="art-clear">Remover arte</button>' : ''}
+              </div>
+              ${inFoundry ? `<p class="dhf-muted">${sourceNote}</p>` : ''}
+              ${
+                  suggestions.length
+                      ? `<h4>Sugestões pelo compêndio</h4>
+                         <div class="dhf-art-grid">${suggestions.map(s => artCard(s.image, `<small>${esc(s.compendium === s.image.name ? s.reason : `${s.compendium} · ${s.reason}`)}</small>`)).join('')}</div>`
+                      : '<p class="dhf-muted">Nenhum adversário do compêndio tem estatísticas parecidas com esta ficha. Procure pelo nome em inglês.</p>'
+              }
+              <h4>Todas as artes <input type="search" data-art-query placeholder="Buscar pelo nome em inglês (ex.: skeleton, ooze)…" value="${esc(state.artQuery)}"></h4>
+              <div class="dhf-art-grid" data-art-grid>${artGrid()}</div>
+              <p class="dhf-muted">Artes do módulo <a href="https://github.com/mordachai/art-for-daggerheart" target="_blank" rel="noopener">Art for Daggerheart</a> ${esc(idx?.art?.ref ?? '')} (Mordachai, geradas por IA, domínio público CC0).</p>
+            </div></div>`;
+    }
+
+    function artRow(a) {
+        if (!state.artIndex) return '';
+        const hint = !a.art && !a.img ? bestArt(a, state.artIndex, { stats: artStats(a) }) : null;
+        return `<div class="dhf-art-row">
+            ${a.img && !a.img.startsWith('systems/') ? `<img class="dhf-portrait" src="${esc(shown(a.img))}" alt="">` : '<div class="dhf-portrait dhf-portrait-empty">?</div>'}
+            <div>
+              <button data-act="art-open">${a.art || a.img ? 'Trocar arte…' : 'Escolher arte…'}</button>
+              ${a.art ? `<span class="dhf-muted">${esc(a.art.name)} · token: ${esc(TOKEN_MODES[a.art.token])}${a.art.ring ? ' com anel' : ''}</span>` : ''}
+              ${
+                  hint
+                      ? `<div class="dhf-art-hint"><img src="${esc(artFiles(hint.image, ART_RAW(state.artIndex)).circle ?? '')}" alt="">
+                         <span>Sugestão: <strong>${esc(hint.image.name)}</strong> <span class="dhf-muted">(${esc(hint.reason)})</span></span>
+                         <button class="dhf-primary" data-act="art-pick" data-name="${esc(hint.image.name)}">Usar</button></div>`
+                      : ''
+              }
+            </div>
+          </div>`;
+    }
+
     const typeLabel = e => (isEnvironment(e) ? ENV_TYPES[e.type]?.label : TYPES[e.type]?.label) ?? e.type;
 
     /** Habilidades únicas (nome + texto), com a origem de onde foram tiradas. */
@@ -275,6 +372,7 @@ export async function mountForge(root, host, { initial } = {}) {
         const isMinion = a.type === 'minion';
         root.querySelector('[data-region="editor"]').innerHTML = `
             <section>
+              ${artRow(a)}
               <div class="dhf-row">
                 <label class="dhf-grow">Nome<input data-f="name" value="${esc(a.name)}"></label>
                 <label>Patamar<select data-f="tier" data-num data-rerender>${options(Object.fromEntries(TIERS.map(t => [t, `${t}º (${TIER_LEVELS[t]})`])), a.tier)}</select></label>
@@ -367,6 +465,7 @@ export async function mountForge(root, host, { initial } = {}) {
         const isMinion = a.type === 'minion';
         const thresholds = isMinion || (!a.major && !a.severe) ? 'nenhum' : `${a.major}/${a.severe || '—'}`;
         return `<article class="dhf-sheet">
+            ${a.img && !a.img.startsWith('systems/') ? `<img class="dhf-sheet-img" src="${esc(shown(a.img))}" alt="">` : ''}
             <h2>${esc(a.name)}</h2>
             <div class="dhf-sub">${esc(TYPES[a.type].label)} (${a.tier}º patamar)${a.type === 'horde' ? ` (${a.hordeHp}/PV)` : ''}</div>
             ${a.description ? `<p class="dhf-desc">${esc(a.description)}</p>` : ''}
@@ -493,6 +592,7 @@ export async function mountForge(root, host, { initial } = {}) {
             const adv = clone(src);
             if (!String(adv.id).startsWith('meu:')) {
                 adv.basedOn = `${adv.name} (${adv.source}${adv.page ? `, p. ${adv.page}` : ''})`;
+                adv.baseId = src.id;
                 adv.id = `meu:${uid()}`;
             }
             setCurrent(adv);
@@ -582,6 +682,23 @@ export async function mountForge(root, host, { initial } = {}) {
             const actor = await host.createActor(toFoundryActor(state.current));
             if (actor) host.notify(`“${state.current.name}” criado no Foundry.`);
         },
+        'art-open': () => {
+            state.artOpen = true;
+            renderArt();
+            root.querySelector('[data-art-query]')?.focus();
+        },
+        'art-close': (el, ev) => {
+            if (el.classList.contains('dhf-modal') && ev.target !== el) return; // clique dentro da caixa
+            state.artOpen = false;
+            renderArt();
+        },
+        'art-pick': el => useArt(el.dataset.name),
+        'art-clear': () => {
+            clearArt(state.current);
+            state.artOpen = false;
+            setCurrent(state.current, { keepUndo: true });
+            renderArt();
+        },
         'import-library': async () => {
             const data = await pickFile();
             if (!data) return;
@@ -618,11 +735,34 @@ export async function mountForge(root, host, { initial } = {}) {
         const el = ev.target.closest('[data-act]');
         if (!el || !root.contains(el)) return;
         if (el.tagName === 'BUTTON') ev.preventDefault();
-        actions[el.dataset.act]?.(el);
+        actions[el.dataset.act]?.(el, ev);
+    });
+
+    root.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape' && state.artOpen) {
+            state.artOpen = false;
+            renderArt();
+        }
     });
 
     root.addEventListener('input', ev => {
         const el = ev.target;
+        if (el.dataset.artQuery !== undefined) {
+            state.artQuery = el.value;
+            root.querySelector('[data-art-grid]').innerHTML = artGrid();
+            return;
+        }
+        if (el.dataset.artOpt) {
+            state.artPrefs[el.dataset.artOpt] = el.type === 'checkbox' ? el.checked : el.value;
+            if (host.kind === 'browser') host.storage.set('art', state.artPrefs);
+            // a arte já escolhida acompanha as novas opções
+            const image = state.current.art && artImage(state.current.art.name);
+            if (image) {
+                applyArt(state.current, image, { base: artBase(), token: state.artPrefs.token, ring: state.artPrefs.ring });
+                setCurrent(state.current, { keepUndo: true });
+            }
+            return renderArt();
+        }
         const value =
             el.type === 'checkbox'
                 ? el.checked
@@ -688,8 +828,16 @@ export async function mountForge(root, host, { initial } = {}) {
           <aside class="dhf-col dhf-lib" data-region="library"></aside>
           <main class="dhf-col dhf-edit" data-region="editor"></main>
           <aside class="dhf-col dhf-out" data-region="output"></aside>
-        </div>`;
+        </div>
+        <div data-region="art"></div>`;
     renderAll();
 
-    return { load: adv => setCurrent(adv), state };
+    return {
+        load: adv => {
+            state.artOpen = false;
+            renderArt();
+            setCurrent(adv);
+        },
+        state
+    };
 }

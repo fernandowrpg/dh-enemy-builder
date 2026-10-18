@@ -6,6 +6,7 @@ import { average, fitFormula, parseFormula, scaleFormula } from '../scripts/core
 import { BENCH, ENV_TYPES, TYPES } from '../scripts/core/rules.mjs';
 import { blankAdversary, blankEnvironment, scaleAdversary, scaleEntity, scaleFeatureText } from '../scripts/core/scale.mjs';
 import { deriveFx, fromFoundryActor, toFoundryActor } from '../scripts/core/foundry-data.mjs';
+import { ART_LOCAL, ART_RAW, applyArt, bestArt, previewUrl, suggestArt } from '../scripts/core/art.mjs';
 
 let count = 0;
 const test = (name, fn) => {
@@ -201,6 +202,33 @@ test('ambientes: escala pela tabela do livro, exporta e lê de volta', () => {
     Object.assign(special, { difficulty: null, difficultyNote: 'igual à do adversário' });
     assert.equal(scaleEntity(special, 4).adversary.difficulty, null);
     assert.equal(toFoundryActor(special).system.difficulty, 14);
+});
+
+test('artes: sugestão pelo compêndio e token exportado', () => {
+    const index = JSON.parse(readFileSync(new URL('../data/art-index.json', import.meta.url), 'utf8'));
+    assert.ok(index.images.length > 100 && index.adversaries.every(a => a.art), 'todo adversário do compêndio tem arte');
+    const archer = { ...blankAdversary('ranged', 1), name: 'Esqueleto Arqueiro', difficulty: 9, major: 4, severe: 7, hp: 3, stress: 2 };
+    archer.attack.bonus = 2;
+    assert.equal(bestArt(archer, index)?.image.name, 'Skeleton Archer');
+    assert.equal(suggestArt({ ...archer, name: 'Skeleton Archer', tier: 3, hp: 9 }, index)[0].reason, 'mesmo nome');
+    assert.equal(bestArt(blankAdversary('standard', 2), index), null);
+
+    const image = index.images.find(i => i.name === 'Skeleton Archer');
+    const local = toFoundryActor(applyArt(structuredClone(archer), image, { base: ART_LOCAL, token: 'wildcard', ring: true }));
+    assert.equal(local.img, 'modules/art-for-daggerheart/adversaries/portraits/Skeleton Archer.webp');
+    assert.equal(local.prototypeToken.texture.src, 'modules/art-for-daggerheart/adversaries/tokens/Skeleton Archer-*.webp');
+    assert.ok(local.prototypeToken.randomImg && local.prototypeToken.ring.enabled);
+    assert.ok(previewUrl(local.img, index).startsWith('https://media.githubusercontent.com/media/mordachai/art-for-daggerheart/'));
+    assert.equal(previewUrl(local.img, index, { inFoundry: true }), local.img);
+
+    // pelo GitHub não há curinga: usa uma variação só
+    const web = toFoundryActor(applyArt(structuredClone(archer), image, { base: ART_RAW(index), token: 'wildcard' }));
+    assert.match(web.prototypeToken.texture.src, /tokens\/Skeleton%20Archer-1\.webp$/);
+    assert.equal(web.prototypeToken.randomImg, false);
+    const back = fromFoundryActor(local);
+    assert.equal(back.token.src, local.prototypeToken.texture.src);
+    assert.equal(back.art.name, 'Skeleton Archer');
+    assert.equal(toFoundryActor(blankAdversary()).prototypeToken.texture, undefined);
 });
 
 const libFile = new URL('../data/library.json', import.meta.url);

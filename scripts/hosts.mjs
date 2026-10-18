@@ -1,5 +1,6 @@
 /** Adaptadores de ambiente: onde guardar dados, como avisar o usuário e como criar o ator. */
 import { MODULE_ID } from './core/rules.mjs';
+import { ART_MODULE } from './core/art.mjs';
 
 /** Página avulsa (GitHub Pages ou `npm start`): guarda tudo no navegador. */
 export function browserHost() {
@@ -7,6 +8,7 @@ export function browserHost() {
     return {
         kind: 'browser',
         libraryUrl: 'data/library.json',
+        artIndexUrl: 'data/art-index.json',
         storage: {
             async get(k) {
                 try {
@@ -37,6 +39,9 @@ export function foundryHost() {
     return {
         kind: 'foundry',
         libraryUrl: `modules/${MODULE_ID}/data/library.json`,
+        artIndexUrl: `modules/${MODULE_ID}/data/art-index.json`,
+        /** Com o Art for Daggerheart ativo, usa os arquivos dele; sem ele, as imagens vêm do GitHub. */
+        artModuleActive: Boolean(game.modules.get(ART_MODULE)?.active),
         storage: {
             async get(k) {
                 const value = game.settings.get(MODULE_ID, k);

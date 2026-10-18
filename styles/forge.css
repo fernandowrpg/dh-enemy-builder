@@ -499,3 +499,145 @@ body.dhf-page {
     color: #fff;
     background: #b3402f;
 }
+
+/* ---------- artes (Art for Daggerheart) ---------- */
+.dhf {
+    position: relative;
+}
+.dhf-art-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.dhf-portrait {
+    flex: none;
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border: 1px solid var(--dhf-line);
+    border-radius: 8px;
+    background: var(--dhf-panel-2);
+}
+.dhf-portrait-empty {
+    display: grid;
+    place-items: center;
+    color: var(--dhf-dim);
+    font-size: 24px;
+}
+.dhf-art-row > div {
+    flex: 1;
+    min-width: 0;
+}
+.dhf-art-row .dhf-muted {
+    margin-left: 6px;
+}
+.dhf-art-hint {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 4px 8px;
+    border: 1px dashed var(--dhf-gold);
+    border-radius: 6px;
+}
+.dhf-art-hint img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+.dhf-art-hint .dhf-muted {
+    margin-left: 0;
+}
+.dhf-sheet-img {
+    float: right;
+    width: 96px;
+    height: 96px;
+    margin: 0 0 6px 10px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+.dhf-modal {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgb(0 0 0 / 0.6);
+}
+.dhf-modal-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(980px, 100%);
+    max-height: 100%;
+    padding: 14px 16px;
+    overflow: auto;
+    background: var(--dhf-panel);
+    border: 1px solid var(--dhf-line);
+    border-radius: 8px;
+}
+.dhf-modal-box header {
+    display: flex;
+    align-items: center;
+}
+.dhf-modal-box header h3 {
+    margin: 0;
+}
+.dhf-modal-box h4 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0 0;
+    color: var(--dhf-gold);
+    font-size: 13px;
+}
+.dhf-modal-box h4 input {
+    flex: 1;
+    min-width: 200px;
+}
+.dhf-art-opts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+}
+.dhf-art-opts label {
+    margin: 0;
+}
+.dhf-art-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+    gap: 8px;
+}
+.dhf .dhf-art-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    text-align: center;
+}
+.dhf .dhf-art-card img {
+    width: 88px;
+    height: 88px;
+    object-fit: cover;
+    border-radius: 50%;
+    background: var(--dhf-bg);
+}
+.dhf .dhf-art-card span {
+    font-size: 12px;
+}
+.dhf .dhf-art-card small {
+    color: var(--dhf-dim);
+    font-size: 11px;
+    font-weight: 400;
+}
+.dhf .dhf-art-card.on {
+    color: var(--dhf-text);
+    background: var(--dhf-panel-2);
+    border: 2px solid var(--dhf-gold);
+}

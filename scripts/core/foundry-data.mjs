@@ -254,7 +254,12 @@ function toFoundryAdversary(adv) {
             },
             experiences
         },
-        prototypeToken: { name: adv.name, disposition: -1, actorLink: false },
+        prototypeToken: {
+            name: adv.name,
+            disposition: -1,
+            actorLink: false,
+            ...(adv.token?.src ? { texture: { src: adv.token.src }, randomImg: Boolean(adv.token.randomImg), ring: { enabled: Boolean(adv.token.ring) } } : {})
+        },
         items: adv.features.map((f, i) => featureItem(f, adv, (i + 1) * 100000)),
         effects:
             adv.type === 'horde'
@@ -329,6 +334,14 @@ function fromFoundryEnvironment(actor) {
     return env;
 }
 
+/** Token do ator (se não for o padrão) e a arte escolhida na Forja, para não se perderem ao reexportar. */
+function tokenOf(actor, saved) {
+    const pt = actor.prototypeToken;
+    const src = pt?.texture?.src;
+    if (!src || /^icons\/svg\/mystery-man|systems\/daggerheart\/assets\/icons\//.test(src)) return {};
+    return { token: { src, randomImg: Boolean(pt.randomImg), ring: Boolean(pt.ring?.enabled) }, ...(saved?.art && saved.img === actor.img ? { art: saved.art } : {}) };
+}
+
 function fromFoundryAdversary(actor) {
     const saved = actor.flags?.[MODULE_ID]?.model;
     const sys = actor.system ?? {};
@@ -345,6 +358,7 @@ function fromFoundryAdversary(actor) {
         name,
         source: 'Foundry',
         img: actor.img,
+        ...tokenOf(actor, saved),
         tier: Number(sys.tier) || 1,
         type: sys.type ?? 'standard',
         hordeHp: Number(sys.hordeHp) || 1,

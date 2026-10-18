@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node tools/serve.mjs",
     "test": "node tools/test.mjs",
-    "extract": "node tools/extract-pdf.mjs"
+    "extract": "node tools/extract-pdf.mjs",
+    "art-index": "node tools/build-art-index.mjs"
   }
 }
