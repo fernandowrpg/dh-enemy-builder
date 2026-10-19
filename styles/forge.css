@@ -599,6 +599,13 @@ body.dhf-page {
     flex: 1;
     min-width: 200px;
 }
+.dhf .dhf-modal-box h4 select {
+    width: auto;
+    max-width: 260px;
+}
+.dhf-modal-box h4 .dhf-muted {
+    font-weight: 400;
+}
 .dhf-art-opts {
     display: flex;
     flex-wrap: wrap;

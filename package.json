@@ -1,6 +1,6 @@
 {
   "name": "dh-antagonist-forge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Forja de Antagonistas para Daggerheart (Foundry VTT 13, sistema Daggerheart 1.9.x)",
   "type": "module",
   "private": true,

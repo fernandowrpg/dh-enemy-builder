@@ -6,7 +6,7 @@ import { average, fitFormula, parseFormula, scaleFormula } from '../scripts/core
 import { BENCH, ENV_TYPES, TYPES } from '../scripts/core/rules.mjs';
 import { blankAdversary, blankEnvironment, scaleAdversary, scaleEntity, scaleFeatureText } from '../scripts/core/scale.mjs';
 import { deriveFx, fromFoundryActor, toFoundryActor } from '../scripts/core/foundry-data.mjs';
-import { ART_LOCAL, ART_RAW, applyArt, bestArt, previewUrl, suggestArt } from '../scripts/core/art.mjs';
+import { ART_LOCAL, ART_RAW, applyArt, applyImage, bestArt, bestOf, isDefaultImage, nameFromPath, previewUrl, setImagePart, suggestArt, suggestImages } from '../scripts/core/art.mjs';
 
 let count = 0;
 const test = (name, fn) => {
@@ -229,6 +229,33 @@ test('artes: sugestão pelo compêndio e token exportado', () => {
     assert.equal(back.token.src, local.prototypeToken.texture.src);
     assert.equal(back.art.name, 'Skeleton Archer');
     assert.equal(toFoundryActor(blankAdversary()).prototypeToken.texture, undefined);
+});
+
+test('artes de qualquer módulo: sugestão por estatísticas, retrato e token', () => {
+    const archer = { ...blankAdversary('ranged', 1), name: 'Esqueleto Arqueiro', difficulty: 9, major: 4, severe: 7, hp: 3, stress: 2 };
+    archer.attack.bonus = 2;
+    const stats = { tier: 1, type: 'ranged', difficulty: 9, major: 4, severe: 7, hp: 3, stress: 2, attack: 2 };
+    const entries = [
+        { key: 'a', name: 'Bone Archer', source: 'Outro Bestiário', img: 'modules/x/bone.webp', token: 'modules/x/bone-*.webp', stats },
+        { key: 'b', name: 'Goblin', source: 'Atores do mundo', img: 'worlds/w/goblin.png', stats: null },
+        { key: 'c', name: 'Esqueleto Arqueiro', source: 'Atores do mundo', img: 'worlds/w/esq.png', stats: null }
+    ];
+    const list = suggestImages(archer, entries);
+    assert.deepEqual(list.map(s => s.entry.key), ['c', 'a']);
+    assert.equal(bestOf(list).entry.key, 'c');
+
+    const adv = applyImage(structuredClone(archer), entries[0], { ring: true });
+    const actor = toFoundryActor(adv);
+    assert.equal(actor.img, 'modules/x/bone.webp');
+    assert.deepEqual([actor.prototypeToken.texture.src, actor.prototypeToken.randomImg, actor.prototypeToken.ring.enabled], ['modules/x/bone-*.webp', true, true]);
+
+    setImagePart(adv, 'token', 'tokens/Bone_Archer-02.png');
+    assert.equal(adv.token.src, 'tokens/Bone_Archer-02.png');
+    assert.equal(adv.art.name, 'Bone Archer', 'trocar só o token mantém o nome da arte');
+    const fresh = setImagePart(structuredClone(archer), 'img', 'tokens/Bone_Archer-02.png');
+    assert.equal(fresh.token.src, fresh.img, 'retrato sem token vira o token');
+    assert.equal(nameFromPath('tokens/Bone_Archer%20Big-02.png'), 'Bone Archer Big 02');
+    assert.ok(isDefaultImage('icons/svg/mystery-man.svg') && isDefaultImage(undefined) && !isDefaultImage('modules/x/bone.webp'));
 });
 
 const libFile = new URL('../data/library.json', import.meta.url);

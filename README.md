@@ -31,6 +31,10 @@ Funciona de dois jeitos, com o mesmo código:
 - **Artes**: escolha retrato e token entre as artes do módulo [Art for Daggerheart](https://github.com/mordachai/art-for-daggerheart)
   (Mordachai, CC0). A Forja sugere a arte comparando as estatísticas da ficha com as do compêndio do sistema, então
   funciona com os nomes em português. O token pode ser de variações aleatórias, em círculo ou igual ao retrato, com ou sem anel.
+  **Dentro do Foundry** a galeria também mostra a arte de qualquer módulo: atores de todos os compêndios (com a arte de
+  compêndio que os módulos aplicam), atores do mundo e, com *Procurar nos arquivos dos módulos*, as imagens das pastas
+  dos módulos ativos, do mundo e das suas pastas em Data. Adversários de outros compêndios também entram nas sugestões,
+  e o navegador de arquivos do Foundry escolhe retrato ou token avulsos.
 - **Editar fichas que já estão no Foundry**: botão direito num adversário ou ambiente → *Abrir na Forja de Antagonistas*.
 
 ## Instalação no Foundry
